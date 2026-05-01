@@ -16,11 +16,9 @@ An interactive, full-stack CPU scheduling simulator that visualizes the **Adapti
 - **Core Algorithm**: C program (`scheduler.exe`) spawned by the Node server
 
 ## 👥 Group Members
-*(Please replace these placeholders with your actual group details)*
-- **Member 1 Name** - Registration No: XXXXXX
-- **Member 2 Name** - Registration No: XXXXXX
-- **Member 3 Name** - Registration No: XXXXXX
-- **Member 4 Name** - Registration No: XXXXXX
+- **1. Shashank Pandey**
+- **2. Devvansh Chaudhary**
+- **3. Abithya**
 
 ## 🚀 How to Run Locally
 
