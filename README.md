@@ -52,10 +52,12 @@ npm run dev
 
 ## 🧠 How the Adaptive Algorithm Works
 1. **Processes Arrive**: Processes enter the ready queue based on their Arrival Time.
-2. **Calculate Quantum**: At the start of each round, the Time Quantum (TQ) is calculated:
-   `TQ = ceil(Σ Remaining Burst Times / N)` (where N is the number of processes in the queue).
-3. **Execute**: Each process gets CPU time equal to `min(remaining_time, TQ)`.
-4. **Recalculate**: After all processes in the queue get a turn, a new round begins and the TQ is recalculated.
+2. **Calculate Quantum**: Before each individual process's turn, the Time Quantum (TQ) is calculated from the current ready queue snapshot:
+   `TQ = ceil(Σ Remaining Burst Times / N)` (where N is the number of processes currently in the queue).
+3. **Execute**: The process at the head of the queue runs for `min(remaining_time, TQ)`.
+4. **Dynamic Arrival**: Any processes that arrive during the time-slice are immediately added to the tail of the ready queue.
+5. **Requeue or Finish**: If a process still has remaining burst time, it is re-inserted at the tail of the queue (true Round Robin preemption). Otherwise, it is marked complete.
+6. **Repeat**: Steps 2–5 repeat for each process turn until all processes finish.
 
 ## 📄 License
 This project is open-source and available under the MIT License.
