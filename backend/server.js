@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -24,7 +24,9 @@ app.post('/run', (req, res) => {
         inputStr += `${p.id} ${p.at} ${p.bt}\n`;
     }
 
-    const exePath = path.join(__dirname, '..', 'c-code', 'scheduler.exe');
+    const isWindows = process.platform === 'win32';
+    const exeName = isWindows ? 'scheduler.exe' : 'scheduler';
+    const exePath = path.join(__dirname, '..', 'c-code', exeName);
     const child = spawn(exePath);
 
     let outputData = '';
