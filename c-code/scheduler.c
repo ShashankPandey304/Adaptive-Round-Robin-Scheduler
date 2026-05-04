@@ -50,28 +50,43 @@ void sort_by_id(Process p[], int n) {
             }
 }
 
+/*
+ * Adaptive Round Robin Simulation
+ * ---------------------------------
+ * Key fix: The quantum is recalculated BEFORE each individual process slot
+ * (not once per full sweep). After each time-slice:
+ *   1. Newly arrived processes are enqueued.
+ *   2. The running process is requeued at the TAIL if it still has remaining time.
+ * This produces true RR preemption: P1->P2->P3->P1->...
+ */
 void simulate_adaptive_rr(Process original_list[], int n, int base_quantum) {
     Process p_list[MAX_PROCESSES];
     for (int i = 0; i < n; i++) {
         p_list[i] = original_list[i];
         p_list[i].first_run = 0;
-        p_list[i].q_count = 0;
-        p_list[i].q_total = 0;
+        p_list[i].q_count   = 0;
+        p_list[i].q_total   = 0;
     }
     sort_by_arrival(p_list, n);
 
-    int t = 0;
-    Process* rq[1000];
+    /* Circular queue for ready processes */
+    Process* rq[MAX_PROCESSES * MAX_QL];
     int head = 0, tail = 0;
-    int pIdx = 0;
+    int pIdx = 0;  /* index into sorted p_list for next-to-arrive */
 
+    int t = 0;
+
+    /* Enqueue all processes that have already arrived at t=0 */
     while (pIdx < n && p_list[pIdx].at <= t)
         rq[tail++] = &p_list[pIdx++];
 
+    /* Main scheduling loop — one iteration = one time-slice for one process */
     while ((tail - head) > 0 || pIdx < n) {
+
+        /* CPU idle: jump time to the next arrival */
         if ((tail - head) == 0) {
             int nextArrival = p_list[pIdx].at;
-            gantt[gIndex].pid   = -1;
+            gantt[gIndex].pid   = -1;   /* idle slot */
             gantt[gIndex].start = t;
             gantt[gIndex].end   = nextArrival;
             gantt[gIndex].tq    = 0;
@@ -79,73 +94,79 @@ void simulate_adaptive_rr(Process original_list[], int n, int base_quantum) {
             t = nextArrival;
             while (pIdx < n && p_list[pIdx].at <= t)
                 rq[tail++] = &p_list[pIdx++];
+            continue;
         }
 
+        /* ---- Recalculate adaptive quantum from CURRENT queue snapshot ---- */
         int N = tail - head;
-        if (N == 0) continue;
-
         int sumRT = 0;
         for (int i = head; i < tail; i++) sumRT += rq[i]->rt;
 
-        int currentTQ = (int)ceil((double)sumRT / N);
-        if (currentTQ < base_quantum) currentTQ = base_quantum;
+        int currentTQ;
+        if (N == 1) {
+            /* Only one process ready — use base quantum to keep CPU available
+             * for imminent arrivals (avoids FCFS monopolization). */
+            currentTQ = base_quantum;
+        } else {
+            /* Multiple processes: adaptive = ceil(avg remaining time) */
+            currentTQ = (int)ceil((double)sumRT / N);
+            /* Clamp: floor = base_quantum, ceiling = 2 * base_quantum */
+            if (currentTQ < base_quantum)       currentTQ = base_quantum;
+            if (currentTQ > 2 * base_quantum)   currentTQ = 2 * base_quantum;
+        }
         if (currentTQ < 1) currentTQ = 1;
 
-        Process* nextRq[1000];
-        int nextTail = 0;
+        /* ---- Dequeue one process from the head ---- */
+        Process* p = rq[head++];
 
-        for (int i = 0; i < N; i++) {
-            Process* p = rq[head++];
-
-            /* Response time: first time process gets CPU */
-            if (!p->first_run) {
-                p->response = t - p->at;
-                p->first_run = 1;
-            }
-
-            /* Context switches */
-            if (last_pid != -999 && last_pid != -1 && last_pid != p->id)
-                context_switches++;
-            last_pid = p->id;
-
-            int timeToRun = p->rt < currentTQ ? p->rt : currentTQ;
-            int startT = t;
-            t += timeToRun;
-            p->rt -= timeToRun;
-            busy_time += timeToRun;
-
-            /* Quantum log per process */
-            if (p->q_count < MAX_QL) {
-                p->ql[p->q_count++] = currentTQ;
-                p->q_total += currentTQ;
-            }
-
-            /* Gantt — merge adjacent same-process blocks */
-            if (gIndex > 0 && gantt[gIndex-1].pid == p->id && gantt[gIndex-1].end == startT) {
-                gantt[gIndex-1].end = t;
-            } else {
-                gantt[gIndex].pid   = p->id;
-                gantt[gIndex].start = startT;
-                gantt[gIndex].end   = t;
-                gantt[gIndex].tq    = currentTQ;
-                gIndex++;
-            }
-
-            while (pIdx < n && p_list[pIdx].at <= t)
-                nextRq[nextTail++] = &p_list[pIdx++];
-
-            if (p->rt > 0) {
-                nextRq[nextTail++] = p;
-            } else {
-                p->ct  = t;
-                p->tat = p->ct - p->at;
-                p->wt  = p->tat - p->bt;
-            }
+        /* Response time: first time this process gets the CPU */
+        if (!p->first_run) {
+            p->response  = t - p->at;
+            p->first_run = 1;
         }
 
-        head = 0;
-        tail = nextTail;
-        for (int i = 0; i < nextTail; i++) rq[i] = nextRq[i];
+        /* Context switch detection */
+        if (last_pid != -999 && last_pid != -1 && last_pid != p->id)
+            context_switches++;
+        last_pid = p->id;
+
+        /* Run for min(remaining_time, quantum) */
+        int timeToRun = (p->rt < currentTQ) ? p->rt : currentTQ;
+        int startT    = t;
+        t            += timeToRun;
+        p->rt        -= timeToRun;
+        busy_time    += timeToRun;
+
+        /* Quantum log per process */
+        if (p->q_count < MAX_QL) {
+            p->ql[p->q_count++] = currentTQ;
+            p->q_total         += currentTQ;
+        }
+
+        /* Gantt chart — merge adjacent same-process blocks */
+        if (gIndex > 0 && gantt[gIndex-1].pid == p->id && gantt[gIndex-1].end == startT) {
+            gantt[gIndex-1].end = t;
+        } else {
+            gantt[gIndex].pid   = p->id;
+            gantt[gIndex].start = startT;
+            gantt[gIndex].end   = t;
+            gantt[gIndex].tq    = currentTQ;
+            gIndex++;
+        }
+
+        /* Enqueue any processes that arrived during this time-slice BEFORE
+         * reinserting the current process — this ensures FIFO ordering. */
+        while (pIdx < n && p_list[pIdx].at <= t)
+            rq[tail++] = &p_list[pIdx++];
+
+        /* Requeue or finish */
+        if (p->rt > 0) {
+            rq[tail++] = p;   /* not done — go back to end of queue */
+        } else {
+            p->ct  = t;
+            p->tat = p->ct - p->at;
+            p->wt  = p->tat - p->bt;
+        }
     }
 
     sort_by_id(p_list, n);
@@ -206,14 +227,14 @@ int main() {
             fprintf(stderr, "Invalid process data.\n");
             return 1;
         }
-        p_list[i].rt       = p_list[i].bt;
-        p_list[i].ct       = 0;
-        p_list[i].tat      = 0;
-        p_list[i].wt       = 0;
-        p_list[i].response = 0;
+        p_list[i].rt        = p_list[i].bt;
+        p_list[i].ct        = 0;
+        p_list[i].tat       = 0;
+        p_list[i].wt        = 0;
+        p_list[i].response  = 0;
         p_list[i].first_run = 0;
-        p_list[i].q_count  = 0;
-        p_list[i].q_total  = 0;
+        p_list[i].q_count   = 0;
+        p_list[i].q_total   = 0;
     }
 
     simulate_adaptive_rr(p_list, n, base_quantum);
