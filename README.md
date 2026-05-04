@@ -1,5 +1,13 @@
 # ⚡ Adaptive Round Robin Scheduler
 
+## 🌐 Live Demo
+| Service | URL |
+|---------|-----|
+| 🔺 **Frontend (Vercel)** | [adaptive-round-robin-scheduler.vercel.app](https://adaptive-round-robin-scheduler.vercel.app) |
+| 🔵 **Backend (Render)** | [adaptive-round-robin-scheduler.onrender.com](https://adaptive-round-robin-scheduler.onrender.com) |
+
+> ⚠️ **Note:** Backend runs on Render's free tier — first request may take **~30–60 seconds** to wake up (cold start). Subsequent requests will be fast.
+
 An interactive, full-stack CPU scheduling simulator that visualizes the **Adaptive Round Robin** algorithm. Instead of using a fixed time quantum, this scheduler dynamically calculates the quantum for each round based on the remaining burst times of the processes in the ready queue.
 
 ## ✨ Features
