@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: arr-scheduler-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: cd .. && gcc -o c-code/scheduler c-code/scheduler.c -lm && cd backend && npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true

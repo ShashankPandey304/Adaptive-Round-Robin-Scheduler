@@ -217,7 +217,8 @@ export default function App() {
     if (queue.length === 0) { setError('Add at least one process to the ready queue.'); return; }
     setLoading(true); setError(null); setResults(null); setGantt(null); setGlobalStats(null);
     try {
-      const res = await fetch('http://localhost:3001/run', {
+      const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const res = await fetch(`${BACKEND}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ processes: queue, baseQuantum }),
